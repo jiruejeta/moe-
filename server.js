@@ -6,44 +6,56 @@ require('dotenv').config();
 
 const app = express();
 
-// Middleware
-app.use(express.json());
-app.use(cookieParser());
+// ========== CORS FIX - MUST BE FIRST ==========
+// Allow all origins during preflight and actual requests
+const allowedOrigins = [
+  'https://moe-exam-frontend-lsr1.vercel.app',
+  'https://moe-exam.vercel.app',
+  'http://localhost:3000'
+];
 
-// CORS configuration - Allow all origins for testing
-app.use((req, res, next) => {
-  const allowedOrigins = [
-    'https://moe-exam-frontend-lsr1.vercel.app',
-    'https://moe-exam.vercel.app',
-    'http://localhost:3000'
-  ];
-  
+// Handle preflight requests for all routes
+app.options('*', (req, res) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
     res.header('Access-Control-Allow-Origin', origin);
   }
-  
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
+
+// Main CORS middleware
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cookie');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie, X-Requested-With');
   
-  // Handle preflight requests
+  // Handle preflight immediately
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
-  
   next();
 });
 
-// Test route
+// Middleware
+app.use(express.json());
+app.use(cookieParser());
+
+// Test route (should work without any auth)
 app.get('/api/test', (req, res) => {
-  res.json({ message: 'Backend is working!', environment: process.env.NODE_ENV });
+  res.json({ message: 'Backend is working!', environment: process.env.NODE_ENV || 'production' });
 });
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.log('MongoDB error:', err));
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(err => console.error('❌ MongoDB error:', err));
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
@@ -56,5 +68,5 @@ app.use('/api/results', require('./routes/results'));
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
