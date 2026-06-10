@@ -1,4 +1,3 @@
-console.log("SERVER FILE IS RUNNING");
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -11,21 +10,21 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 
-// Dynamic CORS for production
+// Dynamic CORS
 const allowedOrigins = [
   'http://localhost:3000',
-  process.env.CORS_ORIGIN,
-  'https://your-frontend-url.onrender.com'
+  'https://moe-exam.vercel.app',
+  process.env.CORS_ORIGIN
 ].filter(Boolean);
 
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
     }
-    return callback(null, true);
   },
   credentials: true,
 }));
