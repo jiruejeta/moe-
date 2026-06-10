@@ -11,15 +11,29 @@ app.use(express.json());
 app.use(cookieParser());
 
 // CORS configuration - Allow all origins for testing
-app.use(cors({
-  origin: true, // This allows all origins
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With']
-}));
-
-// Also handle preflight requests
-app.options('*', cors());
+app.use((req, res, next) => {
+  const allowedOrigins = [
+    'https://moe-exam-frontend-lsr1.vercel.app',
+    'https://moe-exam.vercel.app',
+    'http://localhost:3000'
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cookie');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
+});
 
 // Test route
 app.get('/api/test', (req, res) => {
