@@ -13,9 +13,9 @@ app.use(cookieParser());
 // Dynamic CORS
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://moe-exam.vercel.app',
-  process.env.CORS_ORIGIN
-].filter(Boolean);
+  'https://moe-exam-frontend-lsr1.vercel.app',
+  'https://moe-exam.vercel.app'
+];
 
 app.use(cors({
   origin: function(origin, callback) {
