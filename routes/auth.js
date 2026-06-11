@@ -43,7 +43,7 @@ router.post('/admin/login', async (req, res) => {
     res.cookie('auth_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none', // IMPORTANT for Vercel + Render
+      sameSite: 'none',
       maxAge: 24 * 60 * 60 * 1000,
     });
 
@@ -64,7 +64,7 @@ router.post('/admin/login', async (req, res) => {
 
 
 // =======================
-// 🎓 STUDENT LOGIN
+// 🎓 STUDENT LOGIN (COMPLETE WITH ALL FIELDS)
 // =======================
 router.post('/student/login', async (req, res) => {
   try {
@@ -104,6 +104,7 @@ router.post('/student/login', async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000,
     });
 
+    // Return ALL student fields including examCentre, institutionId, enrollmentType
     return res.json({
       success: true,
       message: 'Student login successful',
@@ -111,10 +112,14 @@ router.post('/student/login', async (req, res) => {
       student: {
         id: student._id,
         username: student.username,
-        fullName: student.fullName,
-        department: student.department,
-        institution: student.institution,
-        gender: student.gender
+        fullName: student.fullName || '',
+        department: student.department || '',
+        blindStatus: student.blindStatus || 'No',
+        examCentre: student.examCentre || 'Not specified',
+        institution: student.institution || 'Not specified',
+        institutionId: student.institutionId || 'Not specified',
+        enrollmentType: student.enrollmentType || 'Regular',
+        gender: student.gender || 'Not specified',
       }
     });
 
