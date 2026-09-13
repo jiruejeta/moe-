@@ -33,7 +33,7 @@ const StudentSchema = new mongoose.Schema({
     ref: 'Department',
     required: true,
   },
-  // Denormalized names for fast display (kept in sync on create/update)
+  // Denormalized names for display
   departmentName: {
     type: String,
     default: '',
@@ -41,18 +41,6 @@ const StudentSchema = new mongoose.Schema({
   className: {
     type: String,
     default: '',
-  },
-  examCentre: {
-    type: String,
-    required: true,
-  },
-  institution: {
-    type: String,
-    required: true,
-  },
-  institutionId: {
-    type: String,
-    required: true,
   },
   enrollmentType: {
     type: String,
@@ -69,7 +57,6 @@ const StudentSchema = new mongoose.Schema({
   },
 });
 
-// Indexes for fast lookup by class/department
 StudentSchema.index({ classId: 1 });
 StudentSchema.index({ departmentId: 1 });
 

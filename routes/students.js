@@ -5,10 +5,7 @@ const Student = require('../models/Student');
 const Department = require('../models/Department');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 
-// =========================================================
-// Helper: validate that departmentId + classId are a valid pair
-// Returns { department, class } on success, or throws an error message.
-// =========================================================
+// ---------- helper ----------
 async function validateDepartmentAndClass(departmentId, classId) {
   if (!departmentId || !classId) {
     throw new Error('Both department and class are required');
@@ -29,20 +26,14 @@ async function validateDepartmentAndClass(departmentId, classId) {
   return { department, class: classDoc };
 }
 
-// =========================================================
-// GET /api/students
-// Optional filters: ?classId=... &departmentId=...
-// =========================================================
+// ---------- list ----------
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
     const filter = {};
     if (req.query.classId) filter.classId = req.query.classId;
     if (req.query.departmentId) filter.departmentId = req.query.departmentId;
 
-    const students = await Student.find(filter)
-      .sort({ createdAt: -1 })
-      .select('-password');
-
+    const students = await Student.find(filter).sort({ createdAt: -1 }).select('-password');
     res.json(students);
   } catch (error) {
     console.error('GET students error:', error);
@@ -50,9 +41,7 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// =========================================================
-// GET /api/students/:id
-// =========================================================
+// ---------- single ----------
 router.get('/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     const student = await Student.findById(req.params.id).select('-password');
@@ -63,12 +52,6 @@ router.get('/:id', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// =========================================================
-// POST /api/students
-// Create one student inside a class.
-// Body: { username, password, fullName, blindStatus, departmentId, classId,
-//         examCentre, institution, institutionId, enrollmentType, gender }
-// =========================================================
 router.post('/', verifyToken, isAdmin, async (req, res) => {
   try {
     const {
@@ -78,9 +61,6 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
       blindStatus,
       departmentId,
       classId,
-      examCentre,
-      institution,
-      institutionId,
       enrollmentType,
       gender,
     } = req.body;
@@ -92,7 +72,6 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
       });
     }
 
-    // Validate dept + class pair
     let dept, cls;
     try {
       ({ department: dept, class: cls } = await validateDepartmentAndClass(departmentId, classId));
@@ -116,9 +95,6 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
       classId: cls._id,
       departmentName: dept.name,
       className: cls.name,
-      examCentre: examCentre || '',
-      institution: institution || '',
-      institutionId: institutionId || '',
       enrollmentType: enrollmentType || 'Regular',
       gender,
     });
@@ -133,11 +109,7 @@ router.post('/', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// =========================================================
-// POST /api/students/bulk
-// Bulk-create students in one class.
-// Body: { departmentId, classId, students: [{ username, password, fullName, ... }] }
-// =========================================================
+// ---------- bulk ----------
 router.post('/bulk', verifyToken, isAdmin, async (req, res) => {
   try {
     const { departmentId, classId, students } = req.body;
@@ -158,10 +130,10 @@ router.post('/bulk', verifyToken, isAdmin, async (req, res) => {
 
     for (const s of students) {
       try {
-        const { username, password, fullName, blindStatus, examCentre, institution, institutionId, enrollmentType, gender } = s;
+        const { username, password, fullName, blindStatus, enrollmentType, gender } = s;
 
         if (!username || !password || !fullName || !gender) {
-          failed.push({ username: username || '(missing)', reason: 'Missing required fields' });
+          failed.push({ username: username || '(missing)', reason: 'Missing required fields (username, password, fullName, gender)' });
           continue;
         }
 
@@ -182,9 +154,6 @@ router.post('/bulk', verifyToken, isAdmin, async (req, res) => {
           classId: cls._id,
           departmentName: dept.name,
           className: cls.name,
-          examCentre: examCentre || '',
-          institution: institution || '',
-          institutionId: institutionId || '',
           enrollmentType: enrollmentType || 'Regular',
           gender,
         });
@@ -208,21 +177,17 @@ router.post('/bulk', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// =========================================================
-// PUT /api/students/:id
-// =========================================================
+// ---------- update ----------
 router.put('/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     const updates = { ...req.body };
 
-    // Never blindly overwrite password
     if (updates.password) {
       updates.password = await bcrypt.hash(updates.password, 10);
     } else {
       delete updates.password;
     }
 
-    // If dept/class changed, re-validate and refresh denormalized names
     if (updates.departmentId || updates.classId) {
       const existing = await Student.findById(req.params.id);
       if (!existing) return res.status(404).json({ message: 'Student not found' });
@@ -253,9 +218,7 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
   }
 });
 
-// =========================================================
-// DELETE /api/students/:id
-// =========================================================
+// ---------- delete ----------
 router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     const student = await Student.findByIdAndDelete(req.params.id);
