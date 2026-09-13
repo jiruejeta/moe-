@@ -5,6 +5,7 @@ const StudentSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
+    trim: true,
   },
   password: {
     type: String,
@@ -13,15 +14,33 @@ const StudentSchema = new mongoose.Schema({
   fullName: {
     type: String,
     required: true,
+    trim: true,
   },
   blindStatus: {
     type: String,
     enum: ['Yes', 'No'],
     default: 'No',
   },
-  department: {
-    type: String,
+  // The main department (e.g., "Grade 9")
+  departmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department',
     required: true,
+  },
+  // The class / sub-department (e.g., "Grade 9 A")
+  classId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department',
+    required: true,
+  },
+  // Denormalized names for fast display (kept in sync on create/update)
+  departmentName: {
+    type: String,
+    default: '',
+  },
+  className: {
+    type: String,
+    default: '',
   },
   examCentre: {
     type: String,
@@ -50,6 +69,8 @@ const StudentSchema = new mongoose.Schema({
   },
 });
 
-// IMPORTANT: This is the correct export syntax
-const Student = mongoose.model('Student', StudentSchema);
-module.exports = Student;
+// Indexes for fast lookup by class/department
+StudentSchema.index({ classId: 1 });
+StudentSchema.index({ departmentId: 1 });
+
+module.exports = mongoose.models.Student || mongoose.model('Student', StudentSchema);

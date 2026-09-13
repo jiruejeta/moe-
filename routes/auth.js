@@ -64,7 +64,7 @@ router.post('/admin/login', async (req, res) => {
 
 
 // =======================
-// 🎓 STUDENT LOGIN (COMPLETE WITH ALL FIELDS)
+// 🎓 STUDENT LOGIN
 // =======================
 router.post('/student/login', async (req, res) => {
   try {
@@ -91,7 +91,8 @@ router.post('/student/login', async (req, res) => {
         id: student._id,
         username: student.username,
         role: 'student',
-        department: student.department
+        departmentId: student.departmentId,
+        classId: student.classId,
       },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
@@ -104,7 +105,7 @@ router.post('/student/login', async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000,
     });
 
-    // Return ALL student fields including examCentre, institutionId, enrollmentType
+    // Return ALL student fields including department + class
     return res.json({
       success: true,
       message: 'Student login successful',
@@ -113,7 +114,10 @@ router.post('/student/login', async (req, res) => {
         id: student._id,
         username: student.username,
         fullName: student.fullName || '',
-        department: student.department || '',
+        departmentId: student.departmentId || '',
+        classId: student.classId || '',
+        departmentName: student.departmentName || '',
+        className: student.className || '',
         blindStatus: student.blindStatus || 'No',
         examCentre: student.examCentre || 'Not specified',
         institution: student.institution || 'Not specified',
