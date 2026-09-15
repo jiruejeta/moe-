@@ -18,6 +18,11 @@ const ResultSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  // NEW: class name (sub-department) for grouping
+  className: {
+    type: String,
+    default: '',
+  },
   courseCode: {
     type: String,
     required: true,
@@ -57,5 +62,7 @@ const ResultSchema = new mongoose.Schema({
   },
 });
 
-const Result = mongoose.model('Result', ResultSchema);
-module.exports = Result;
+ResultSchema.index({ department: 1, className: 1 });
+ResultSchema.index({ studentId: 1 });
+
+module.exports = mongoose.models.Result || mongoose.model('Result', ResultSchema);

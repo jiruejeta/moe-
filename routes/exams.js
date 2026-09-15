@@ -181,21 +181,22 @@ router.post('/submit', verifyToken, isStudent, async (req, res) => {
     }
     
     // Create result
-    const result = await Result.create({
-      studentId: attempt.studentId,
-      studentName: student?.fullName || 'Unknown Student',
-      studentUsername: attempt.studentUsername || 'unknown',
-      department: attempt.department || 'Unknown',
-      courseCode: attempt.courseCode,
-      courseName: course?.name || attempt.courseCode,
-      score: attempt.score,
-      totalQuestions: attempt.totalQuestions || 0,
-      percentage: attempt.percentage || 0,
-      correctAnswers: correctCount,
-      incorrectAnswers: (attempt.totalQuestions || 0) - correctCount,
-      timeSpent: timeSpent || 0,
-      violations: violations || 0,
-    });
+  const result = await Result.create({
+  studentId: attempt.studentId,
+  studentName: student?.fullName || 'Unknown Student',
+  studentUsername: attempt.studentUsername || 'unknown',
+  department: attempt.department || 'Unknown',
+  className: student?.className || '',   // NEW
+  courseCode: attempt.courseCode,
+  courseName: course?.name || attempt.courseCode,
+  score: attempt.score,
+  totalQuestions: attempt.totalQuestions || 0,
+  percentage: attempt.percentage || 0,
+  correctAnswers: correctCount,
+  incorrectAnswers: (attempt.totalQuestions || 0) - correctCount,
+  timeSpent: timeSpent || 0,
+  violations: violations || 0,
+});
     
     console.log('Result created:', result._id);
     console.log('=== SUBMIT SUCCESS ===');
