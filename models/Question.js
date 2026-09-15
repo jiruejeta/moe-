@@ -24,11 +24,22 @@ const QuestionSchema = new mongoose.Schema({
     enum: ['A', 'B', 'C', 'D'],
     required: true,
   },
+  // NEW — draft by default; publish when ready
+  status: {
+    type: String,
+    enum: ['draft', 'published'],
+    default: 'draft',
+  },
+  publishedAt: {
+    type: Date,
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
   },
 });
 
-const Question = mongoose.model('Question', QuestionSchema);
-module.exports = Question;
+QuestionSchema.index({ courseCode: 1, status: 1 });
+
+module.exports = mongoose.models.Question || mongoose.model('Question', QuestionSchema);

@@ -51,7 +51,17 @@ router.post('/start', verifyToken, isStudent, async (req, res) => {
       });
     }
 
-    const totalQuestions = await Question.countDocuments({ courseCode: course.code });
+    // ONLY published questions count toward the exam
+    const totalQuestions = await Question.countDocuments({
+      courseCode: course.code,
+      status: 'published',
+    });
+
+    if (totalQuestions === 0) {
+      return res.status(400).json({
+        message: 'This exam has no published questions yet. Please contact your administrator.',
+      });
+    }
 
     const attempt = await ExamAttempt.create({
       studentId: student._id,
@@ -92,6 +102,11 @@ router.post('/save-answer', verifyToken, isStudent, async (req, res) => {
     const question = await Question.findById(questionId);
     if (!question) {
       return res.status(404).json({ message: 'Question not found' });
+    }
+
+    // Students can only answer published questions
+    if (question.status !== 'published') {
+      return res.status(403).json({ message: 'This question is not available' });
     }
 
     const isCorrect = selectedAnswer === question.correctAnswer;
