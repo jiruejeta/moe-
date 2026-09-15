@@ -9,21 +9,30 @@ const CourseSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
+    uppercase: true,
   },
+  // Main department only (name kept in sync for filtering on the student side)
   department: {
     type: String,
     required: true,
   },
-  examDuration: {
-    type: Number,
+  departmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department',
     required: true,
   },
-  examCodes: [{
-    type: String,
-  }],
+  examDuration: {
+    type: Number, // minutes
+    required: true,
+  },
+  examCodes: [
+    {
+      type: String,
+    },
+  ],
   examPassword: {
     type: String,
-    default: 'EXAM123', // Default password
+    default: 'EXAM123',
   },
   createdAt: {
     type: Date,
@@ -31,4 +40,6 @@ const CourseSchema = new mongoose.Schema({
   },
 });
 
-module.exports = mongoose.model('Course', CourseSchema);
+CourseSchema.index({ departmentId: 1 });
+
+module.exports = mongoose.models.Course || mongoose.model('Course', CourseSchema);

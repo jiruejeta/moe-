@@ -1,20 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const Course = require('../models/Course');
+const Department = require('../models/Department');
 const { verifyToken, isAdmin } = require('../middleware/auth');
 
-// Generate exam codes
-function generateExamCodes(courseName, department) {
-  const prefix = courseName.substring(0, 2).toUpperCase();
-  const deptCode = department.substring(0, 2).toUpperCase();
+// ---------- Exam code generator ----------
+function generateExamCodes(courseName, departmentName) {
+  const coursePrefix = (courseName || 'XX').replace(/\s+/g, '').substring(0, 2).toUpperCase();
+  const deptPrefix = (departmentName || 'XX').replace(/\s+/g, '').substring(0, 2).toUpperCase();
   const codes = [];
   for (let i = 1; i <= 4; i++) {
-    codes.push(`${deptCode}-${prefix}-${1000 + i}`);
+    codes.push(`${deptPrefix}-${coursePrefix}-${1000 + i}`);
   }
   return codes;
 }
 
-// Get all courses
+// ---------- helper: validate a main department ----------
+async function resolveMainDepartment(departmentId) {
+  if (!departmentId) throw new Error('Department is required');
+  const dept = await Department.findById(departmentId);
+  if (!dept) throw new Error('Department not found');
+  if (dept.level !== 'main') {
+    throw new Error('Courses must belong to a main department, not a class');
+  }
+  return dept;
+}
+
+// ---------- GET all courses ----------
 router.get('/', verifyToken, async (req, res) => {
   try {
     const courses = await Course.find().sort({ createdAt: -1 });
@@ -24,7 +36,7 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
-// Get courses by department
+// ---------- GET courses by department name ----------
 router.get('/department/:department', verifyToken, async (req, res) => {
   try {
     const courses = await Course.find({ department: req.params.department });
@@ -34,60 +46,96 @@ router.get('/department/:department', verifyToken, async (req, res) => {
   }
 });
 
-// Create course (Admin only)
+// ---------- CREATE course (Admin only) ----------
 router.post('/', verifyToken, isAdmin, async (req, res) => {
   try {
-    const { name, code, department, examDuration, examPassword } = req.body;
-    
-    const existingCourse = await Course.findOne({ $or: [{ name }, { code }] });
-    if (existingCourse) {
+    const { name, code, departmentId, examDuration, examPassword } = req.body;
+
+    if (!name || !code || !departmentId || !examDuration) {
+      return res.status(400).json({
+        message: 'Missing required fields',
+        required: ['name', 'code', 'departmentId', 'examDuration'],
+      });
+    }
+
+    // Validate department
+    let dept;
+    try {
+      dept = await resolveMainDepartment(departmentId);
+    } catch (err) {
+      return res.status(400).json({ message: err.message });
+    }
+
+    // Duplicate checks
+    const existing = await Course.findOne({
+      $or: [{ name: name.trim() }, { code: code.trim().toUpperCase() }],
+    });
+    if (existing) {
       return res.status(400).json({ message: 'Course name or code already exists' });
     }
-    
-    const examCodes = generateExamCodes(name, department);
-    
+
+    const examCodes = generateExamCodes(name, dept.name);
+
     const course = await Course.create({
-      name,
-      code,
-      department,
+      name: name.trim(),
+      code: code.trim().toUpperCase(),
+      department: dept.name,
+      departmentId: dept._id,
       examDuration,
       examCodes,
       examPassword: examPassword || 'EXAM123',
     });
-    
+
     res.status(201).json(course);
   } catch (error) {
+    console.error('Create course error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Update course (Admin only)
+// ---------- UPDATE course (Admin only) ----------
 router.put('/:id', verifyToken, isAdmin, async (req, res) => {
   try {
-    const { examPassword, ...otherUpdates } = req.body;
-    
-    const updateData = { ...otherUpdates };
-    if (examPassword) {
-      updateData.examPassword = examPassword;
+    const { name, code, departmentId, examDuration, examPassword } = req.body;
+
+    const course = await Course.findById(req.params.id);
+    if (!course) return res.status(404).json({ message: 'Course not found' });
+
+    const updates = {};
+
+    if (name) updates.name = name.trim();
+    if (code) updates.code = code.trim().toUpperCase();
+    if (examDuration) updates.examDuration = examDuration;
+    if (examPassword) updates.examPassword = examPassword;
+
+    if (departmentId) {
+      let dept;
+      try {
+        dept = await resolveMainDepartment(departmentId);
+      } catch (err) {
+        return res.status(400).json({ message: err.message });
+      }
+      updates.departmentId = dept._id;
+      updates.department = dept.name;
     }
-    
-    const course = await Course.findByIdAndUpdate(req.params.id, updateData, { new: true });
-    if (!course) {
-      return res.status(404).json({ message: 'Course not found' });
-    }
-    res.json(course);
+
+    const updated = await Course.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
+
+    res.json(updated);
   } catch (error) {
+    console.error('Update course error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Delete course (Admin only)
+// ---------- DELETE course (Admin only) ----------
 router.delete('/:id', verifyToken, isAdmin, async (req, res) => {
   try {
     const course = await Course.findByIdAndDelete(req.params.id);
-    if (!course) {
-      return res.status(404).json({ message: 'Course not found' });
-    }
+    if (!course) return res.status(404).json({ message: 'Course not found' });
     res.json({ message: 'Course deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
