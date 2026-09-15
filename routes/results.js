@@ -1,9 +1,69 @@
+const express = require('express');
+const router = express.Router();
+const ExcelJS = require('exceljs');
+const Result = require('../models/Result');
+const { verifyToken, isAdmin } = require('../middleware/auth');
+
 // =========================================================
-// EXCEL EXPORT
-//   ?mode=by-course  (default)  → one sheet per COURSE
-//   ?mode=by-class              → one sheet per CLASS
-//   ?mode=flat                  → one sheet, grouped inside
-//   Optional filters: department, className, courseCode
+// GET /api/results
+// =========================================================
+router.get('/', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.department) filter.department = req.query.department;
+    if (req.query.className) filter.className = req.query.className;
+    if (req.query.courseCode) filter.courseCode = req.query.courseCode;
+
+    const results = await Result.find(filter).sort({ completedAt: -1 });
+    res.json(results);
+  } catch (error) {
+    console.error('GET results error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// =========================================================
+// GET /api/results/department/:department
+// =========================================================
+router.get('/department/:department', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const results = await Result.find({ department: req.params.department })
+      .sort({ completedAt: -1 });
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// =========================================================
+// GET /api/results/class/:className
+// =========================================================
+router.get('/class/:className', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const results = await Result.find({ className: req.params.className })
+      .sort({ completedAt: -1 });
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// =========================================================
+// GET /api/results/student/:studentId
+// =========================================================
+router.get('/student/:studentId', verifyToken, async (req, res) => {
+  try {
+    const results = await Result.find({ studentId: req.params.studentId })
+      .sort({ completedAt: -1 });
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// =========================================================
+// GET /api/results/export/excel
+//   ?mode=by-course (default) | by-class | flat
 // =========================================================
 router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
   try {
@@ -29,21 +89,8 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
     workbook.creator = 'Exam Portal';
     workbook.created = new Date();
 
-    // ---------- helpers ----------
     const sanitize = (s) =>
       (s || 'Sheet').replace(/[:\\/?*\[\]]/g, '_').substring(0, 31);
-
-    const setHeaderRow = (ws) => {
-      ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      ws.getRow(1).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF0D3B8E' },
-      };
-      ws.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-      ws.views = [{ state: 'frozen', ySplit: 1 }];
-      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 13 } };
-    };
 
     const baseColumns = [
       { header: 'Department', key: 'department', width: 22 },
@@ -61,9 +108,79 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
       { header: 'Completed At', key: 'completedAt', width: 22 },
     ];
 
-    // ---------- Mode: BY COURSE (default) ----------
+    const styleHeader = (ws) => {
+      ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      ws.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0D3B8E' },
+      };
+      ws.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
+      ws.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: 1, column: 13 },
+      };
+    };
+
+    const pushStudentRow = (ws, r, rowIndex) => {
+      const row = ws.getRow(rowIndex);
+      row.values = [
+        r.department,
+        r.className,
+        `${r.courseName} (${r.courseCode})`,
+        r.studentName,
+        r.studentUsername,
+        r.score,
+        r.totalQuestions,
+        r.correctAnswers,
+        r.incorrectAnswers,
+        r.percentage,
+        r.timeSpent || 0,
+        r.violations || 0,
+        new Date(r.completedAt).toLocaleString(),
+      ];
+      return rowIndex + 1;
+    };
+
+    const pushBanner = (ws, text, rowIndex, opts = {}) => {
+      const row = ws.getRow(rowIndex);
+      row.getCell(1).value = text;
+      ws.mergeCells(rowIndex, 1, rowIndex, 13);
+      row.getCell(1).font = {
+        bold: true,
+        size: opts.size || 11,
+        italic: !!opts.italic,
+        color: opts.color ? { argb: opts.color } : undefined,
+      };
+      if (opts.fill) {
+        row.getCell(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: opts.fill },
+        };
+      }
+      return rowIndex + 1;
+    };
+
+    const pushSubtotal = (ws, count, avg, rowIndex) => {
+      const row = ws.getRow(rowIndex);
+      row.getCell(4).value = `Sub-total: ${count} student(s)`;
+      row.getCell(10).value = `Avg: ${avg.toFixed(1)}%`;
+      row.font = { bold: true };
+      row.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFF7E0' },
+      };
+      return rowIndex + 2;
+    };
+
+    const avgOf = (rows) =>
+      rows.reduce((a, b) => a + (b.percentage || 0), 0) / rows.length;
+
     if (mode !== 'by-class' && mode !== 'flat') {
-      // group by course
+      // BY COURSE (default)
       const byCourse = {};
       results.forEach((r) => {
         const key = `${r.courseName} (${r.courseCode})`;
@@ -74,8 +191,8 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
       Object.entries(byCourse).forEach(([courseLabel, rows]) => {
         const ws = workbook.addWorksheet(sanitize(courseLabel));
         ws.columns = baseColumns;
+        styleHeader(ws);
 
-        // Group inside the course sheet: Department -> Class
         const grouped = {};
         rows.forEach((r) => {
           const dept = r.department || 'Unassigned';
@@ -85,74 +202,26 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
           grouped[dept][cls].push(r);
         });
 
-        setHeaderRow(ws);
         let rowIndex = 2;
-
         Object.entries(grouped).forEach(([dept, classes]) => {
-          // Department banner
-          const dRow = ws.getRow(rowIndex);
-          dRow.getCell(1).value = `DEPARTMENT: ${dept}`;
-          ws.mergeCells(rowIndex, 1, rowIndex, 13);
-          dRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF0D3B8E' } };
-          dRow.getCell(1).fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFE5EEF7' },
-          };
-          rowIndex++;
-
+          rowIndex = pushBanner(ws, `DEPARTMENT: ${dept}`, rowIndex, {
+            size: 12,
+            color: 'FF0D3B8E',
+            fill: 'FFE5EEF7',
+          });
           Object.entries(classes).forEach(([cls, classRows]) => {
-            const cRow = ws.getRow(rowIndex);
-            cRow.getCell(1).value = `CLASS: ${cls}`;
-            ws.mergeCells(rowIndex, 1, rowIndex, 13);
-            cRow.getCell(1).font = { bold: true, size: 11 };
-            cRow.getCell(1).fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFF2F2F2' },
-            };
-            rowIndex++;
-
-            classRows.forEach((r) => {
-              const row = ws.getRow(rowIndex);
-              row.values = [
-                r.department,
-                r.className,
-                `${r.courseName} (${r.courseCode})`,
-                r.studentName,
-                r.studentUsername,
-                r.score,
-                r.totalQuestions,
-                r.correctAnswers,
-                r.incorrectAnswers,
-                r.percentage,
-                r.timeSpent || 0,
-                r.violations || 0,
-                new Date(r.completedAt).toLocaleString(),
-              ];
-              rowIndex++;
+            rowIndex = pushBanner(ws, `CLASS: ${cls}`, rowIndex, {
+              size: 11,
+              fill: 'FFF2F2F2',
             });
-
-            // Class subtotal for this course
-            const avg =
-              classRows.reduce((a, b) => a + (b.percentage || 0), 0) /
-              classRows.length;
-            const sub = ws.getRow(rowIndex);
-            sub.getCell(4).value = `Sub-total: ${classRows.length} student(s)`;
-            sub.getCell(10).value = `Avg: ${avg.toFixed(1)}%`;
-            sub.font = { bold: true };
-            sub.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFFFF7E0' },
-            };
-            rowIndex += 2;
+            classRows.forEach((r) => {
+              rowIndex = pushStudentRow(ws, r, rowIndex);
+            });
+            rowIndex = pushSubtotal(ws, classRows.length, avgOf(classRows), rowIndex);
           });
         });
       });
-    }
-    // ---------- Mode: BY CLASS ----------
-    else if (mode === 'by-class') {
+    } else if (mode === 'by-class') {
       const byClass = {};
       results.forEach((r) => {
         const key = r.className || 'Unassigned';
@@ -163,8 +232,8 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
       Object.entries(byClass).forEach(([cls, rows]) => {
         const ws = workbook.addWorksheet(sanitize(cls));
         ws.columns = baseColumns;
+        styleHeader(ws);
 
-        // Group inside class sheet: Department -> Course
         const grouped = {};
         rows.forEach((r) => {
           const dept = r.department || 'Unassigned';
@@ -174,74 +243,30 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
           grouped[dept][course].push(r);
         });
 
-        setHeaderRow(ws);
         let rowIndex = 2;
-
         Object.entries(grouped).forEach(([dept, courses]) => {
-          const dRow = ws.getRow(rowIndex);
-          dRow.getCell(1).value = `DEPARTMENT: ${dept}`;
-          ws.mergeCells(rowIndex, 1, rowIndex, 13);
-          dRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF0D3B8E' } };
-          dRow.getCell(1).fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFE5EEF7' },
-          };
-          rowIndex++;
-
+          rowIndex = pushBanner(ws, `DEPARTMENT: ${dept}`, rowIndex, {
+            size: 12,
+            color: 'FF0D3B8E',
+            fill: 'FFE5EEF7',
+          });
           Object.entries(courses).forEach(([courseLabel, courseRows]) => {
-            const coRow = ws.getRow(rowIndex);
-            coRow.getCell(1).value = `COURSE: ${courseLabel}`;
-            ws.mergeCells(rowIndex, 1, rowIndex, 13);
-            coRow.getCell(1).font = { bold: true, italic: true, size: 11 };
-            coRow.getCell(1).fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFF9F9F9' },
-            };
-            rowIndex++;
-
-            courseRows.forEach((r) => {
-              const row = ws.getRow(rowIndex);
-              row.values = [
-                r.department,
-                r.className,
-                `${r.courseName} (${r.courseCode})`,
-                r.studentName,
-                r.studentUsername,
-                r.score,
-                r.totalQuestions,
-                r.correctAnswers,
-                r.incorrectAnswers,
-                r.percentage,
-                r.timeSpent || 0,
-                r.violations || 0,
-                new Date(r.completedAt).toLocaleString(),
-              ];
-              rowIndex++;
+            rowIndex = pushBanner(ws, `COURSE: ${courseLabel}`, rowIndex, {
+              size: 11,
+              italic: true,
+              fill: 'FFF9F9F9',
             });
-
-            const avg =
-              courseRows.reduce((a, b) => a + (b.percentage || 0), 0) /
-              courseRows.length;
-            const sub = ws.getRow(rowIndex);
-            sub.getCell(4).value = `Sub-total: ${courseRows.length} student(s)`;
-            sub.getCell(10).value = `Avg: ${avg.toFixed(1)}%`;
-            sub.font = { bold: true };
-            sub.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFFFF7E0' },
-            };
-            rowIndex += 2;
+            courseRows.forEach((r) => {
+              rowIndex = pushStudentRow(ws, r, rowIndex);
+            });
+            rowIndex = pushSubtotal(ws, courseRows.length, avgOf(courseRows), rowIndex);
           });
         });
       });
-    }
-    // ---------- Mode: FLAT ----------
-    else {
+    } else {
       const ws = workbook.addWorksheet('Results');
       ws.columns = baseColumns;
+      styleHeader(ws);
 
       const grouped = {};
       results.forEach((r) => {
@@ -254,78 +279,28 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
         grouped[dept][cls][course].push(r);
       });
 
-      setHeaderRow(ws);
       let rowIndex = 2;
-
       Object.entries(grouped).forEach(([dept, classes]) => {
-        const dRow = ws.getRow(rowIndex);
-        dRow.getCell(1).value = `DEPARTMENT: ${dept}`;
-        ws.mergeCells(rowIndex, 1, rowIndex, 13);
-        dRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF0D3B8E' } };
-        dRow.getCell(1).fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE5EEF7' },
-        };
-        rowIndex++;
-
+        rowIndex = pushBanner(ws, `DEPARTMENT: ${dept}`, rowIndex, {
+          size: 12,
+          color: 'FF0D3B8E',
+          fill: 'FFE5EEF7',
+        });
         Object.entries(classes).forEach(([cls, courses]) => {
-          const cRow = ws.getRow(rowIndex);
-          cRow.getCell(1).value = `CLASS: ${cls}`;
-          ws.mergeCells(rowIndex, 1, rowIndex, 13);
-          cRow.getCell(1).font = { bold: true, size: 11 };
-          cRow.getCell(1).fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFF2F2F2' },
-          };
-          rowIndex++;
-
+          rowIndex = pushBanner(ws, `CLASS: ${cls}`, rowIndex, {
+            size: 11,
+            fill: 'FFF2F2F2',
+          });
           Object.entries(courses).forEach(([courseLabel, courseRows]) => {
-            const coRow = ws.getRow(rowIndex);
-            coRow.getCell(1).value = `COURSE: ${courseLabel}`;
-            ws.mergeCells(rowIndex, 1, rowIndex, 13);
-            coRow.getCell(1).font = { bold: true, italic: true, size: 11 };
-            coRow.getCell(1).fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFF9F9F9' },
-            };
-            rowIndex++;
-
-            courseRows.forEach((r) => {
-              const row = ws.getRow(rowIndex);
-              row.values = [
-                r.department,
-                r.className,
-                `${r.courseName} (${r.courseCode})`,
-                r.studentName,
-                r.studentUsername,
-                r.score,
-                r.totalQuestions,
-                r.correctAnswers,
-                r.incorrectAnswers,
-                r.percentage,
-                r.timeSpent || 0,
-                r.violations || 0,
-                new Date(r.completedAt).toLocaleString(),
-              ];
-              rowIndex++;
+            rowIndex = pushBanner(ws, `COURSE: ${courseLabel}`, rowIndex, {
+              size: 11,
+              italic: true,
+              fill: 'FFF9F9F9',
             });
-
-            const avg =
-              courseRows.reduce((a, b) => a + (b.percentage || 0), 0) /
-              courseRows.length;
-            const sub = ws.getRow(rowIndex);
-            sub.getCell(4).value = `Sub-total: ${courseRows.length} student(s)`;
-            sub.getCell(10).value = `Avg: ${avg.toFixed(1)}%`;
-            sub.font = { bold: true };
-            sub.fill = {
-              type: 'pattern',
-              pattern: 'solid',
-              fgColor: { argb: 'FFFFF7E0' },
-            };
-            rowIndex += 2;
+            courseRows.forEach((r) => {
+              rowIndex = pushStudentRow(ws, r, rowIndex);
+            });
+            rowIndex = pushSubtotal(ws, courseRows.length, avgOf(courseRows), rowIndex);
           });
         });
       });
@@ -345,3 +320,18 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
+
+// =========================================================
+// GET /api/results/:id  (must be last)
+// =========================================================
+router.get('/:id', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const result = await Result.findById(req.params.id);
+    if (!result) return res.status(404).json({ message: 'Result not found' });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+module.exports = router;
