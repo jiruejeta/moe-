@@ -6,6 +6,7 @@ const { verifyToken, isAdmin } = require('../middleware/auth');
 
 // =========================================================
 // GET /api/results
+// Optional filters: ?department=...&className=...&courseCode=...
 // =========================================================
 router.get('/', verifyToken, isAdmin, async (req, res) => {
   try {
@@ -27,8 +28,7 @@ router.get('/', verifyToken, isAdmin, async (req, res) => {
 // =========================================================
 router.get('/department/:department', verifyToken, isAdmin, async (req, res) => {
   try {
-    const results = await Result.find({ department: req.params.department })
-      .sort({ completedAt: -1 });
+    const results = await Result.find({ department: req.params.department }).sort({ completedAt: -1 });
     res.json(results);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -40,8 +40,7 @@ router.get('/department/:department', verifyToken, isAdmin, async (req, res) => 
 // =========================================================
 router.get('/class/:className', verifyToken, isAdmin, async (req, res) => {
   try {
-    const results = await Result.find({ className: req.params.className })
-      .sort({ completedAt: -1 });
+    const results = await Result.find({ className: req.params.className }).sort({ completedAt: -1 });
     res.json(results);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -53,8 +52,7 @@ router.get('/class/:className', verifyToken, isAdmin, async (req, res) => {
 // =========================================================
 router.get('/student/:studentId', verifyToken, async (req, res) => {
   try {
-    const results = await Result.find({ studentId: req.params.studentId })
-      .sort({ completedAt: -1 });
+    const results = await Result.find({ studentId: req.params.studentId }).sort({ completedAt: -1 });
     res.json(results);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -64,6 +62,7 @@ router.get('/student/:studentId', verifyToken, async (req, res) => {
 // =========================================================
 // GET /api/results/export/excel
 //   ?mode=by-course (default) | by-class | flat
+//   Optional: department, className, courseCode
 // =========================================================
 router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
   try {
@@ -180,7 +179,7 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
       rows.reduce((a, b) => a + (b.percentage || 0), 0) / rows.length;
 
     if (mode !== 'by-class' && mode !== 'flat') {
-      // BY COURSE (default)
+      // BY COURSE
       const byCourse = {};
       results.forEach((r) => {
         const key = `${r.courseName} (${r.courseCode})`;
@@ -222,6 +221,7 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
         });
       });
     } else if (mode === 'by-class') {
+      // BY CLASS
       const byClass = {};
       results.forEach((r) => {
         const key = r.className || 'Unassigned';
@@ -264,6 +264,7 @@ router.get('/export/excel', verifyToken, isAdmin, async (req, res) => {
         });
       });
     } else {
+      // FLAT
       const ws = workbook.addWorksheet('Results');
       ws.columns = baseColumns;
       styleHeader(ws);
