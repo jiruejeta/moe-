@@ -14,9 +14,15 @@ const ExamAttemptSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  // Department NAME (e.g., "Electrical and Computer Engineering")
   department: {
     type: String,
     required: true,
+  },
+  // Class NAME (e.g., "Computer") — NEW
+  className: {
+    type: String,
+    default: '',
   },
   answers: [{
     questionId: {
