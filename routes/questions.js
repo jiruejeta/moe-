@@ -11,7 +11,6 @@ router.get('/course/:courseCode', verifyToken, async (req, res) => {
   try {
     const filter = { courseCode: req.params.courseCode };
 
-    // Only admins can see drafts
     if (req.user.role !== 'admin') {
       filter.status = 'published';
     }
@@ -25,7 +24,6 @@ router.get('/course/:courseCode', verifyToken, async (req, res) => {
 
 // =========================================================
 // GET /api/questions/course/:courseCode/count
-// Returns total + published + draft counts
 // =========================================================
 router.get('/course/:courseCode/count', verifyToken, async (req, res) => {
   try {
@@ -34,6 +32,49 @@ router.get('/course/:courseCode/count', verifyToken, async (req, res) => {
     const published = await Question.countDocuments({ courseCode, status: 'published' });
     const draft = await Question.countDocuments({ courseCode, status: 'draft' });
     res.json({ total, published, draft });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// =========================================================
+// POST /api/questions/publish/:courseCode
+// Publish ALL drafts for a course
+// MUST be declared before any /:id POST route (none here) — kept above /:id for clarity
+// =========================================================
+router.post('/publish/:courseCode', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { courseCode } = req.params;
+    const result = await Question.updateMany(
+      { courseCode, status: 'draft' },
+      { $set: { status: 'published', publishedAt: new Date() } }
+    );
+    res.json({
+      message: `${result.modifiedCount} question(s) published for ${courseCode}`,
+      modifiedCount: result.modifiedCount,
+      courseCode,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// =========================================================
+// POST /api/questions/unpublish/:courseCode
+// Move ALL published questions back to draft
+// =========================================================
+router.post('/unpublish/:courseCode', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { courseCode } = req.params;
+    const result = await Question.updateMany(
+      { courseCode, status: 'published' },
+      { $set: { status: 'draft', publishedAt: null } }
+    );
+    res.json({
+      message: `${result.modifiedCount} question(s) moved back to draft for ${courseCode}`,
+      modifiedCount: result.modifiedCount,
+      courseCode,
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -111,44 +152,6 @@ router.put('/:id', verifyToken, isAdmin, async (req, res) => {
     });
     if (!question) return res.status(404).json({ message: 'Question not found' });
     res.json(question);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// =========================================================
-// POST /api/questions/publish/:courseCode
-// Publish ALL drafts for a course
-// =========================================================
-router.post('/publish/:courseCode', verifyToken, isAdmin, async (req, res) => {
-  try {
-    const result = await Question.updateMany(
-      { courseCode: req.params.courseCode, status: 'draft' },
-      { $set: { status: 'published', publishedAt: new Date() } }
-    );
-    res.json({
-      message: `${result.modifiedCount} question(s) published`,
-      modifiedCount: result.modifiedCount,
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// =========================================================
-// POST /api/questions/unpublish/:courseCode
-// Move ALL published questions back to draft
-// =========================================================
-router.post('/unpublish/:courseCode', verifyToken, isAdmin, async (req, res) => {
-  try {
-    const result = await Question.updateMany(
-      { courseCode: req.params.courseCode, status: 'published' },
-      { $set: { status: 'draft', publishedAt: null } }
-    );
-    res.json({
-      message: `${result.modifiedCount} question(s) moved back to draft`,
-      modifiedCount: result.modifiedCount,
-    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
